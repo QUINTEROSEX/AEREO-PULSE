@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AeroPulse | Centro de Control y Monitoreo Térmico</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <!-- PANTALLA DE ACCESO MULTICUENTA TIPO STEAM -->
+    <div id="auth-overlay" class="lockscreen-overlay">
+        <div class="steam-modal">
+            <div class="brand-dot"></div>
+            <h2>AeroPulse OS</h2>
+            <p class="steam-subtitle" id="auth-subtitle">Selecciona un operador o inicia sesión</p>
+            
+            <!-- VISTA 1: SELECTOR DE CUENTAS GUARDADAS -->
+            <div id="steamAccountSelector" class="steam-accounts-grid">
+                <div class="steam-add-card" onclick="showSteamLoginForm()">
+                    <div class="steam-plus-icon">+</div>
+                    <span>Añadir cuenta</span>
+                </div>
+            </div>
+
+            <!-- VISTA 2: FORMULARIO DE INICIO DE SESIÓN -->
+            <form id="steamLoginForm" onsubmit="handleSteamLogin(event)" style="display: none;">
+                <div class="form-group">
+                    <label for="loginEmail">Correo Electrónico</label>
+                    <input type="email" id="loginEmail" placeholder="operador@aeropulse.io" required class="steam-input">
+                    
+                    <label for="loginPass" style="margin-top: 0.9rem;">Contraseña</label>
+                    <input type="password" id="loginPass" placeholder="••••••••" required class="steam-input">
+                </div>
+                <button type="submit" class="cta-btn">Ingresar al Sistema</button>
+                <p id="loginError" class="error-msg"></p>
+                
+                <div class="steam-modal-actions">
+                    <a href="#" onclick="showSteamRegisterForm()">Crear cuenta</a>
+                    <span>•</span>
+                    <a href="#" onclick="backToSteamSelector()">Perfiles</a>
+                </div>
+            </form>
+
+            <!-- VISTA 3: FORMULARIO DE REGISTRO NUEVO -->
+            <form id="steamRegisterForm" onsubmit="handleSteamRegister(event)" style="display: none;">
+                <div class="form-group">
+                    <label for="regName">Nombre de Operador</label>
+                    <input type="text" id="regName" placeholder="Ej. Juan Quintero" required class="steam-input">
+
+                    <label for="regEmail" style="margin-top: 0.7rem;">Correo Electrónico</label>
+                    <input type="email" id="regEmail" placeholder="correo@ejemplo.com" required class="steam-input">
+                    
+                    <label for="regPass" style="margin-top: 0.7rem;">Contraseña</label>
+                    <input type="password" id="regPass" placeholder="Mínimo 6 caracteres" required class="steam-input">
+                </div>
+                <button type="submit" class="cta-btn">Registrar y Entrar</button>
+                <p id="regError" class="error-msg"></p>
+                
+                <div class="steam-modal-actions">
+                    <a href="#" onclick="showSteamLoginForm()">Ya tengo cuenta</a>
+                    <span>•</span>
+                    <a href="#" onclick="backToSteamSelector()">Perfiles</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- INTERFAZ PRINCIPAL MINIMALISTA -->
+    <div id="main-content" style="display: none; flex-direction: column; min-height: 100vh;">
+
+        <!-- Barra Superior Minimalista -->
+        <header>
+            <div class="logo-container">
+                <span class="status-pulse"></span>
+                <span class="logo-text">AEROPULSE</span>
+                <span class="live-badge">EN VIVO • YUMBO</span>
+            </div>
+            <nav>
+                <button class="nav-btn active" onclick="switchPage('dashboard')">Centro de Control</button>
+                <button class="nav-btn" onclick="switchPage('camaras')">Red de Cámaras</button>
+                <button class="nav-btn" onclick="switchPage('hardware-3d')">Hardware & Simulador</button>
+                <button id="adminNavBtn" class="nav-btn admin-btn" onclick="switchPage('admin-panel')" style="display: none;">Admin</button>
+                <button class="nav-btn logout-btn" onclick="logoutSession()">Cambiar Cuenta</button>
+            </nav>
+        </header>
+
+        <!-- VISTA 1: CENTRO DE CONTROL EN TIEMPO REAL (INICIO) -->
+        <section id="dashboard" class="page-section active">
+            <!-- Métricas Superiores Rápidas -->
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <span class="kpi-label">Cámaras Activas</span>
+                    <div class="kpi-value-row">
+                        <span class="kpi-value" id="kpiCameras">4 / 4</span>
+                        <span class="kpi-tag tag-ok">Online</span>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Probabilidad de Incendio</span>
+                    <div class="kpi-value-row">
+                        <span class="kpi-value" id="kpiRiskPercent">68%</span>
+                        <span class="kpi-tag tag-warn" id="kpiRiskBadge">Riesgo Alto</span>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Incidentes Registrados</span>
+                    <div class="kpi-value-row">
+                        <span class="kpi-value" id="kpiIncidentsCount">0</span>
+                        <span class="kpi-tag tag-neutral">Cloud Sync</span>
+                    </div>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Respuesta Acústica</span>
+                    <div class="kpi-value-row">
+                        <span class="kpi-value">45 Hz</span>
+                        <span class="kpi-tag tag-ok">Listo</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grid Operativo Principal -->
+            <div class="dashboard-main-grid">
+                
+                <!-- COLUMNA IZQUIERDA: PREDICTOR DE PROBABILIDAD EN TIEMPO REAL -->
+                <div class="panel-box">
+                    <div class="panel-header">
+                        <h3>🌡️ Predictor de Riesgo Térmico (Yumbo)</h3>
+                        <button class="mini-btn" onclick="syncLocalWeatherPreset()">Simular Clima Actual</button>
+                    </div>
+                    <p class="panel-sub">Ajusta las variables ambientales para calcular la probabilidad de ignición y activar protocolos preventivos.</p>
+
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span>Temperatura Ambiente</span>
+                            <strong id="tempVal">31 °C</strong>
+                        </div>
+                        <input type="range" id="tempSlider" min="15" max="45" value="31" oninput="calculateFireProbability()">
+                    </div>
+
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span>Humedad Relativa</span>
+                            <strong id="humVal">38 %</strong>
+                        </div>
+                        <input type="range" id="humSlider" min="10" max="95" value="38" oninput="calculateFireProbability()">
+                    </div>
+
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span>Velocidad del Viento</span>
+                            <strong id="windVal">22 km/h</strong>
+                        </div>
+                        <input type="range" id="windSlider" min="0" max="60" value="22" oninput="calculateFireProbability()">
+                    </div>
+
+                    <div class="risk-meter-box" id="riskMeterBox">
+                        <div class="risk-meter-header">
+                            <span>Índice de Riesgo Calculado</span>
+                            <span id="riskStatusText" style="font-weight: 700;">ALTO (68%)</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill" id="riskProgressBar" style="width: 68%;"></div>
+                        </div>
+                        <p class="risk-advice" id="riskAdviceText">Condiciones secas y viento moderado en zona industrial/cerros. Mantener sensores IR en vigilancia continua.</p>
+                    </div>
+                </div>
+
+                <!-- COLUMNA DERECHA: BITÁCORA DE ÚLTIMOS INCENDIOS (FIREBASE TIEMPO REAL) -->
+                <div class="panel-box">
+                    <div class="panel-header">
+                        <h3>🔥 Últimos Incendios Detectados</h3>
+                        <button class="mini-btn accent" onclick="toggleReportForm()">+ Registrar Evento</button>
+                    </div>
+                    <p class="panel-sub">Sincronización automática con Firebase Firestore. Las alertas de cámaras aparecen aquí al instante.</p>
+
+                    <!-- Formulario rápido para reportar/simular detección real -->
+                    <form id="newAlertForm" onsubmit="createFireAlert(event)" class="quick-alert-form" style="display: none;">
+                        <input type="text" id="alertZone" placeholder="Sector (Ej. Zona Industrial Calle 15, Cerros...)" required class="steam-input">
+                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                            <select id="alertLevel" class="steam-input">
+                                <option value="Conato Inicial">Conato Inicial (Humo / Llama baja)</option>
+                                <option value="Alerta Crítica">Alerta Crítica (Fuego activo)</option>
+                                <option value="Sofocado por AeroPulse">Sofocado por AeroPulse</option>
+                            </select>
+                            <button type="submit" class="cta-btn" style="width: auto; padding: 0 1.2rem;">Guardar</button>
+                        </div>
+                    </form>
+
+                    <div id="liveIncidentsFeed" class="incidents-feed">
+                        <div class="empty-feed">Conectando con la base de datos en tiempo real...</div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- VISTA 2: RED DE CÁMARAS Y DETECCIÓN IA -->
+        <section id="camaras" class="page-section">
+            <div class="section-header-flex">
+                <div>
+                    <h2 class="section-title">Red de Cámaras de Detección</h2>
+                    <p class="section-desc">Monitoreo visual y térmico conectado a nodos en Yumbo. Haz clic en una cámara para probar la detección de fuego.</p>
+                </div>
+                <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+                    <button class="mini-btn" onclick="toggleThermalMode()" id="thermalToggleBtn">👁️ Modo Térmico: OFF</button>
+                    <button class="mini-btn accent" onclick="toggleAddCameraModal()">+ Vincular Cámara IP</button>
+                </div>
+            </div>
+
+            <!-- Formulario para añadir cámara física/IP -->
+            <form id="addCameraForm" onsubmit="addNewCameraNode(event)" class="panel-box" style="display: none; margin-bottom: 1.5rem;">
+                <h4 style="margin-bottom: 0.8rem; color: var(--accent-green);">Vincular Nuevo Nodo de Cámara (ESP32-CAM / RTSP / IP)</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.8rem;">
+                    <input type="text" id="camName" placeholder="Nombre (Ej. CAM-05 Acopi)" required class="steam-input">
+                    <input type="text" id="camLocation" placeholder="Ubicación exacta en Yumbo" required class="steam-input">
+                    <input type="text" id="camIp" placeholder="URL Stream o IP (Ej. 192.168.1.50)" required class="steam-input">
+                    <button type="submit" class="cta-btn">Conectar Nodo</button>
+                </div>
+            </form>
+
+            <!-- Cuadrícula de Cámaras -->
+            <div class="cameras-grid" id="camerasGrid">
+                <!-- Se renderizan dinámicamente con JS -->
+            </div>
+        </section>
+
+        <!-- VISTA 3: HARDWARE 3D INTERACTIVO Y SIMULADOR ACÚSTICO -->
+        <section id="hardware-3d" class="page-section">
+            <h2 class="section-title">Hardware AeroPulse & Supresión Acústica</h2>
+            <p class="section-desc">Inspecciona los componentes del nodo supresor o prueba el disparo de ondas de baja frecuencia.</p>
+
+            <div class="interactive-3d-layout">
+                <!-- Modelo 3D con Pines Interactivos -->
+                <div class="canvas-3d-wrapper">
+                    <div id="interactive-3d-canvas" class="canvas-box interactive-canvas" style="position: relative;">
+                        <div class="hotspot-pin" style="top: 16%; left: 62%;" onclick="selectComponentByName('colimador')">
+                            <span class="pin-dot"></span>
+                            <div class="pin-label">Boquilla • $45k</div>
+                        </div>
+                        <div class="hotspot-pin" style="top: 48%; left: 66%;" onclick="selectComponentByName('sensores')">
+                            <span class="pin-dot"></span>
+                            <div class="pin-label">Sensor IR • $28k</div>
+                        </div>
+                        <div class="hotspot-pin" style="top: 50%; left: 34%;" onclick="selectComponentByName('cuerpo')">
+                            <span class="pin-dot"></span>
+                            <div class="pin-label">Chasis • $65k</div>
+                        </div>
+                        <div class="hotspot-pin" style="top: 80%; left: 58%;" onclick="selectComponentByName('transductor')">
+                            <span class="pin-dot"></span>
+                            <div class="pin-label">Subwoofer • $135k</div>
+                        </div>
+                    </div>
+                    <div class="canvas-hint">Arrastra para rotar el modelo • Toca los indicadores para ver costos</div>
+                </div>
+
+                <!-- Ficha Técnica Minimalista -->
+                <div class="component-info-card">
+                    <div>
+                        <div class="card-tag" id="comp-tag">Componente</div>
+                        <h3 id="comp-title">Selecciona una pieza en el 3D</h3>
+                        <p id="comp-desc">Toca cualquier indicador luminoso sobre el cilindro para consultar su especificación técnica y presupuesto estimado.</p>
+                    </div>
+                    
+                    <div>
+                        <div class="price-container">
+                            <div class="price-box">
+                                <span class="price-label">Costo COP</span>
+                                <span class="price-value" id="comp-price-cop">$0</span>
+                            </div>
+                            <div class="price-box">
+                                <span class="price-label">Costo USD</span>
+                                <span class="price-value" id="comp-price-usd">$0.00</span>
+                            </div>
+                        </div>
+
+                        <div class="quick-btn-group">
+                            <button onclick="selectComponentByName('colimador')">Boquilla</button>
+                            <button onclick="selectComponentByName('transductor')">Transductor</button>
+                            <button onclick="selectComponentByName('sensores')">Sensores IR</button>
+                            <button onclick="selectComponentByName('cuerpo')">Chasis ABS</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Simulador 2D Compacto -->
+            <div class="panel-box" style="margin-top: 2rem;">
+                <div class="panel-header">
+                    <h3>🔊 Prueba de Disparo Acústico (30 - 60 Hz)</h3>
+                    <button class="sim-trig-btn" onclick="triggerFireSuppressionSimulation()">Simular Conato y Disparo</button>
+                </div>
+                <canvas id="cutawayCanvas" width="900" height="280" style="width: 100%; border-radius: 8px; margin-top: 1rem;"></canvas>
+                <div class="sim-status-bar" id="simStatusText">Sistema en espera • Listo para supresión sin agua ni químicos.</div>
+            </div>
+        </section>
+
+        <!-- VISTA 4: PANEL DE ADMINISTRADOR -->
+        <section id="admin-panel" class="page-section">
+            <h2 class="section-title">Panel de Administración</h2>
+            <p class="section-desc">Operadores registrados en la plataforma.</p>
+
+            <div class="panel-box">
+                <table class="db-table">
+                    <thead>
+                        <tr>
+                            <th>Operador</th>
+                            <th>Correo Electrónico</th>
+                            <th>Fecha de Alta</th>
+                        </tr>
+                    </thead>
+                    <tbody id="firebase-users-table">
+                        <tr>
+                            <td colspan="3" style="text-align: center;">Cargando registros...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- FIREBASE Y LÓGICA EN TIEMPO REAL -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, getDocs, addDoc, query, where, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCtpRPTHjvs0zvgD0OyZ_-pjOfty2OWquc",
+            authDomain: "base-de-data-dbb60.firebaseapp.com",
+            projectId: "base-de-data-dbb60",
+            storageBucket: "base-de-data-dbb60.firebasestorage.app",
+            messagingSenderId: "621398387717",
+            appId: "1:621398387717:web:99cec1dfbbea470f9d806c"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const ADMIN_EMAIL = "jquinteromeneses1@gmail.com";
+
+        // --- SISTEMA MULTICUENTA TIPO STEAM ---
+        window.loadSavedAccounts = function() {
+            const container = document.getElementById('steamAccountSelector');
+            if(!container) return;
+
+            let saved = JSON.parse(localStorage.getItem('aeropulse_saved_accounts') || '[]');
+            let html = '';
+            saved.forEach(acc => {
+                html += `
+                    <div class="steam-acc-card" onclick="quickLogin('${acc.email}', '${acc.password}')">
+                        <div class="steam-avatar">👤</div>
+                        <span class="steam-acc-name">${acc.name}</span>
+                        <span class="steam-acc-email">${acc.email}</span>
+                    </div>
+                `;
+            });
+
+            html += `
+                <div class="steam-add-card" onclick="showSteamLoginForm()">
+                    <div class="steam-plus-icon">+</div>
+                    <span>Añadir cuenta</span>
+                </div>
+            `;
+            container.innerHTML = html;
+        };
+
+        window.showSteamLoginForm = function() {
+            document.getElementById('steamAccountSelector').style.display = 'none';
+            document.getElementById('steamLoginForm').style.display = 'block';
+            document.getElementById('steamRegisterForm').style.display = 'none';
+            document.getElementById('auth-subtitle').innerText = "Inicia sesión con tus credenciales";
+        };
+
+        window.showSteamRegisterForm = function() {
+            document.getElementById('steamAccountSelector').style.display = 'none';
+            document.getElementById('steamLoginForm').style.display = 'none';
+            document.getElementById('steamRegisterForm').style.display = 'block';
+            document.getElementById('auth-subtitle').innerText = "Registro de nuevo operador";
+        };
+
+        window.backToSteamSelector = function() {
+            document.getElementById('steamAccountSelector').style.display = 'flex';
+            document.getElementById('steamLoginForm').style.display = 'none';
+            document.getElementById('steamRegisterForm').style.display = 'none';
+            document.getElementById('auth-subtitle').innerText = "Selecciona un operador o inicia sesión";
+        };
+
+        window.handleSteamRegister = async function(event) {
+            event.preventDefault();
+            const name = document.getElementById('regName').value.trim();
+            const email = document.getElementById('regEmail').value.trim().toLowerCase();
+            const pass = document.getElementById('regPass').value;
+            const errP = document.getElementById('regError');
+
+            if(pass.length < 6) {
+                errP.innerText = "La contraseña debe tener mínimo 6 caracteres.";
+                errP.style.display = 'block';
+                return;
+            }
+
+            try {
+                const q = query(collection(db, "usuarios"), where("email", "==", email));
+                const querySnapshot = await getDocs(q);
+                
+                if (!querySnapshot.empty) {
+                    errP.innerText = "Este correo ya existe. Inicia sesión.";
+                    errP.style.display = 'block';
+                    return;
+                }
+
+                await addDoc(collection(db, "usuarios"), {
+                    nombre: name,
+                    email: email,
+                    password: pass,
+                    fecha: new Date().toLocaleDateString()
+                });
+
+                saveAccountLocally(name, email, pass);
+                unlockAppSession(name, email);
+            } catch (e) {
+                console.error(e);
+                errP.innerText = "Error de permisos en Firebase. Revisa las reglas de Firestore.";
+                errP.style.display = 'block';
+            }
+        };
+
+        window.handleSteamLogin = async function(event) {
+            event.preventDefault();
+            const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+            const pass = document.getElementById('loginPass').value;
+            const errText = document.getElementById('loginError');
+
+            try {
+                const q = query(collection(db, "usuarios"), where("email", "==", email), where("password", "==", pass));
+                const querySnapshot = await getDocs(q);
+
+                if (!querySnapshot.empty) {
+                    let userName = "Operador";
+                    querySnapshot.forEach(doc => { userName = doc.data().nombre || "Operador"; });
+                    saveAccountLocally(userName, email, pass);
+                    unlockAppSession(userName, email);
+                } else {
+                    errText.innerText = "Credenciales incorrectas o usuario no registrado.";
+                    errText.style.display = 'block';
+                }
+            } catch (e) {
+                console.error(e);
+                errText.innerText = "Error de permisos en Firebase. Revisa las reglas de Firestore.";
+                errText.style.display = 'block';
+            }
+        };
+
+        window.quickLogin = async function(email, pass) {
+            try {
+                const q = query(collection(db, "usuarios"), where("email", "==", email), where("password", "==", pass));
+                const querySnapshot = await getDocs(q);
+
+                if (!querySnapshot.empty) {
+                    let userName = "Operador";
+                    querySnapshot.forEach(doc => { userName = doc.data().nombre || "Operador"; });
+                    unlockAppSession(userName, email);
+                } else {
+                    showSteamLoginForm();
+                    document.getElementById('loginEmail').value = email;
+                }
+            } catch (e) {
+                showSteamLoginForm();
+            }
+        };
+
+        function saveAccountLocally(name, email, pass) {
+            let saved = JSON.parse(localStorage.getItem('aeropulse_saved_accounts') || '[]');
+            saved = saved.filter(acc => acc.email !== email);
+            saved.push({ name, email, password: pass });
+            localStorage.setItem('aeropulse_saved_accounts', JSON.stringify(saved));
+        }
+
+        function unlockAppSession(name, email) {
+            document.getElementById('auth-overlay').style.display = 'none';
+            document.getElementById('main-content').style.display = 'flex';
+
+            if (email === ADMIN_EMAIL.toLowerCase()) {
+                document.getElementById('adminNavBtn').style.display = 'inline-block';
+                loadRegisteredUsers();
+            }
+
+            startRealtimeFireListener();
+            setTimeout(() => { if (window.trigger3DResize) window.trigger3DResize(); }, 150);
+        }
+
+        window.logoutSession = function() {
+            document.getElementById('main-content').style.display = 'none';
+            document.getElementById('auth-overlay').style.display = 'flex';
+            document.getElementById('adminNavBtn').style.display = 'none';
+            backToSteamSelector();
+            loadSavedAccounts();
+        };
+
+        // --- ESCUCHA EN TIEMPO REAL DE INCENDIOS / CÁMARAS (FIRESTORE) ---
+        let listenerStarted = false;
+        function startRealtimeFireListener() {
+            if (listenerStarted) return;
+            listenerStarted = true;
+
+            const feed = document.getElementById('liveIncidentsFeed');
+            const counter = document.getElementById('kpiIncidentsCount');
+
+            onSnapshot(collection(db, "alertas_incendios"), (snapshot) => {
+                counter.innerText = snapshot.size;
+
+                if (snapshot.empty) {
+                    feed.innerHTML = `
+                        <div class="incident-item safe">
+                            <div>
+                                <strong>Sin incendios activos en Yumbo</strong>
+                                <p>Todas las cámaras están monitoreando sin anomalías térmicas.</p>
+                            </div>
+                            <span class="incident-time">Ahora</span>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let items = [];
+                snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+                items.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+                feed.innerHTML = items.map(alerta => {
+                    const isCritical = (alerta.estado || '').toLowerCase().includes('crítica') || (alerta.estado || '').toLowerCase().includes('conato');
+                    return `
+                        <div class="incident-item ${isCritical ? 'danger' : 'resolved'}">
+                            <div>
+                                <strong>${isCritical ? '🔥' : '✅'} ${alerta.ubicacion || 'Sector Yumbo'}</strong>
+                                <p>${alerta.estado || 'Alerta registrada'} • Origen: ${alerta.origen || 'Sensor / Cámara'}</p>
+                            </div>
+                            <div class="incident-meta">
+                                <span>${alerta.fecha || ''}</span>
+                                <strong>${alerta.hora || ''}</strong>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }, (err) => {
+                console.error("Error leyendo alertas:", err);
+                feed.innerHTML = `<div class="empty-feed">Esperando conexión con colección alertas_incendios...</div>`;
+            });
+        }
+
+        // Registrar alerta manual o disparada desde una cámara
+        window.createFireAlert = async function(event, customZone = null, customOrigin = "Reporte Manual") {
+            if (event) event.preventDefault();
+            const zone = customZone || document.getElementById('alertZone').value.trim();
+            const status = customZone ? "Conato Inicial Detectado" : document.getElementById('alertLevel').value;
+            const now = new Date();
+
+            try {
+                await addDoc(collection(db, "alertas_incendios"), {
+                    ubicacion: zone,
+                    estado: status,
+                    origen: customOrigin,
+                    fecha: now.toLocaleDateString('es-CO'),
+                    hora: now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                    timestamp: Date.now()
+                });
+
+                if (!customZone) {
+                    document.getElementById('alertZone').value = '';
+                    document.getElementById('newAlertForm').style.display = 'none';
+                }
+            } catch (e) {
+                alert("No se pudo guardar la alerta en Firebase. Verifica los permisos.");
+            }
+        };
+
+        async function loadRegisteredUsers() {
+            const tableBody = document.getElementById('firebase-users-table');
+            if (!tableBody) return;
+            try {
+                const querySnapshot = await getDocs(collection(db, "usuarios"));
+                let html = '';
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    html += `<tr><td>${data.nombre || 'Operador'}</td><td>${data.email || ''}</td><td>${data.fecha || '-'}</td></tr>`;
+                });
+                tableBody.innerHTML = html || `<tr><td colspan="3">Sin registros</td></tr>`;
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadSavedAccounts();
+        });
+    </script>
+
+    <!-- LÓGICA DE INTERACCIÓN: PREDICTOR, CÁMARAS Y 3D -->
+    <script>
+        function switchPage(pageId) {
+            document.querySelectorAll('.page-section').forEach(sec => sec.classList.remove('active'));
+            document.querySelectorAll('header nav .nav-btn').forEach(btn => btn.classList.remove('active'));
+            
+            const target = document.getElementById(pageId);
+            if (target) target.classList.add('active');
+
+            const map = { 'dashboard': 0, 'camaras': 1, 'hardware-3d': 2, 'admin-panel': 3 };
+            const btns = document.querySelectorAll('header nav .nav-btn');
+            if (btns[map[pageId]]) btns[map[pageId]].classList.add('active');
+
+            setTimeout(() => { if (window.trigger3DResize) window.trigger3DResize(); }, 100);
+        }
+
+        // --- PREDICTOR DE PROBABILIDAD DE INCENDIO ---
+        function calculateFireProbability() {
+            const temp = parseInt(document.getElementById('tempSlider').value);
+            const hum = parseInt(document.getElementById('humSlider').value);
+            const wind = parseInt(document.getElementById('windSlider').value);
+
+            document.getElementById('tempVal').innerText = `${temp} °C`;
+            document.getElementById('humVal').innerText = `${hum} %`;
+            document.getElementById('windVal').innerText = `${wind} km/h`;
+
+            // Fórmula ponderada de riesgo térmico
+            let score = ((temp - 15) / 30) * 45 + ((100 - hum) / 90) * 35 + (wind / 60) * 20;
+            score = Math.max(5, Math.min(99, Math.round(score)));
+
+            const bar = document.getElementById('riskProgressBar');
+            const statusText = document.getElementById('riskStatusText');
+            const adviceText = document.getElementById('riskAdviceText');
+            const kpiPercent = document.getElementById('kpiRiskPercent');
+            const kpiBadge = document.getElementById('kpiRiskBadge');
+
+            bar.style.width = `${score}%`;
+            kpiPercent.innerText = `${score}%`;
+
+            if (score < 35) {
+                bar.style.backgroundColor = '#7fffd4';
+                statusText.style.color = '#7fffd4';
+                statusText.innerText = `BAJO (${score}%)`;
+                kpiBadge.className = 'kpi-tag tag-ok';
+                kpiBadge.innerText = 'Estable';
+                adviceText.innerText = 'Humedad favorable y temperatura controlada. Riesgo mínimo de propagación espontánea.';
+            } else if (score < 65) {
+                bar.style.backgroundColor = '#ffad33';
+                statusText.style.color = '#ffad33';
+                statusText.innerText = `MODERADO (${score}%)`;
+                kpiBadge.className = 'kpi-tag tag-warn';
+                kpiBadge.innerText = 'Vigilancia';
+                adviceText.innerText = 'Precaución en zonas con vegetación seca o acumulación de residuos inflamables.';
+            } else if (score < 85) {
+                bar.style.backgroundColor = '#f97316';
+                statusText.style.color = '#f97316';
+                statusText.innerText = `ALTO (${score}%)`;
+                kpiBadge.className = 'kpi-tag tag-warn';
+                kpiBadge.innerText = 'Riesgo Alto';
+                adviceText.innerText = 'Alta probabilidad de ignición rápida. Mantener nodos AeroPulse armados y cámaras IR activas.';
+            } else {
+                bar.style.backgroundColor = '#ef4444';
+                statusText.style.color = '#ef4444';
+                statusText.innerText = `CRÍTICO (${score}%)`;
+                kpiBadge.className = 'kpi-tag tag-danger';
+                kpiBadge.innerText = 'Crítico';
+                adviceText.innerText = 'ALERTA MÁXIMA: Calor extremo y baja humedad. Cualquier chispa puede escalar en segundos.';
+            }
+        }
+
+        function syncLocalWeatherPreset() {
+            const presets = [
+                { t: 34, h: 32, w: 28 },
+                { t: 26, h: 65, w: 12 },
+                { t: 38, h: 22, w: 35 }
+            ];
+            const p = presets[Math.floor(Math.random() * presets.length)];
+            document.getElementById('tempSlider').value = p.t;
+            document.getElementById('humSlider').value = p.h;
+            document.getElementById('windSlider').value = p.w;
+            calculateFireProbability();
+        }
+
+        function toggleReportForm() {
+            const form = document.getElementById('newAlertForm');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // --- RED DE CÁMARAS INTERACTIVA ---
+        let thermalMode = false;
+        let camerasList = [
+            { id: 'CAM-01', name: 'Zona Industrial Calle 15', ip: '192.168.1.101', temp: '29°C', status: 'Normal' },
+            { id: 'CAM-02', name: 'Cerro de las Tres Cruces', ip: '192.168.1.102', temp: '33°C', status: 'Normal' },
+            { id: 'CAM-03', name: 'Sector Arroyohondo', ip: '192.168.1.103', temp: '30°C', status: 'Normal' },
+            { id: 'CAM-04', name: 'Parque Belalcázar Centro', ip: '192.168.1.104', temp: '28°C', status: 'Normal' }
+        ];
+
+        function renderCameras() {
+            const grid = document.getElementById('camerasGrid');
+            if (!grid) return;
+
+            document.getElementById('kpiCameras').innerText = `${camerasList.length} / ${camerasList.length}`;
+
+            grid.innerHTML = camerasList.map((cam, idx) => `
+                <div class="camera-card ${cam.status === 'FUEGO DETECTADO' ? 'cam-alert' : ''}">
+                    <div class="cam-viewport ${thermalMode ? 'thermal-view' : ''}">
+                        <div class="cam-hud-top">
+                            <span>● REC • ${cam.id}</span>
+                            <span>${cam.temp}</span>
+                        </div>
+                        <div class="cam-crosshair">+</div>
+                        ${cam.status === 'FUEGO DETECTADO' ? '<div class="ai-box-detect">🔥 LLAMA DETECTADA (98%)</div>' : ''}
+                        <div class="cam-hud-bottom">
+                            <span>${cam.ip}</span>
+                            <span>IA: ${cam.status}</span>
+                        </div>
+                    </div>
+                    <div class="cam-footer">
+                        <div>
+                            <strong>${cam.name}</strong>
+                            <p>${cam.status === 'FUEGO DETECTADO' ? 'Alerta enviada a Firebase' : 'Monitoreo continuo activo'}</p>
+                        </div>
+                        <button class="mini-btn ${cam.status === 'FUEGO DETECTADO' ? '' : 'danger-outline'}" onclick="simulateCameraFire(${idx})">
+                            ${cam.status === 'FUEGO DETECTADO' ? 'Restablecer' : 'Probar Detección'}
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function toggleThermalMode() {
+            thermalMode = !thermalMode;
+            const btn = document.getElementById('thermalToggleBtn');
+            btn.innerText = thermalMode ? '👁️ Modo Térmico: ON' : '👁️ Modo Térmico: OFF';
+            renderCameras();
+        }
+
+        function toggleAddCameraModal() {
+            const form = document.getElementById('addCameraForm');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function addNewCameraNode(event) {
+            event.preventDefault();
+            const name = document.getElementById('camName').value.trim();
+            const loc = document.getElementById('camLocation').value.trim();
+            const ip = document.getElementById('camIp').value.trim();
+
+            camerasList.push({
+                id: `CAM-0${camerasList.length + 1}`,
+                name: `${name} (${loc})`,
+                ip: ip,
+                temp: '29°C',
+                status: 'Normal'
+            });
+
+            document.getElementById('addCameraForm').reset();
+            document.getElementById('addCameraForm').style.display = 'none';
+            renderCameras();
+        }
+
+        async function simulateCameraFire(index) {
+            const cam = camerasList[index];
+            if (cam.status === 'FUEGO DETECTADO') {
+                cam.status = 'Normal';
+                cam.temp = '29°C';
+                renderCameras();
+                return;
+            }
+
+            cam.status = 'FUEGO DETECTADO';
+            cam.temp = '142°C';
+            renderCameras();
+
+            if (window.createFireAlert) {
+                await window.createFireAlert(null, cam.name, `Cámara IA (${cam.id})`);
+            }
+        }
+
+        // --- EXPLORADOR 3D Y SIMULADOR 2D ---
+        const componentsData = {
+            colimador: {
+                tag: "Boquilla Acústica",
+                title: "Boquilla Cónica Colimadora",
+                desc: "Concentra el frente de onda sonora en un pulso direccional de alta presión hacia la base del fuego.",
+                cop: "$ 45.000 COP",
+                usd: "$ 11.50 USD"
+            },
+            transductor: {
+                tag: "Generador Acústico",
+                title: "Subwoofer de Baja Frecuencia (30-60 Hz)",
+                desc: "Transductor de alta excursión capaz de desplazar el oxígeno mediante ondas subsónicas sin usar agua.",
+                cop: "$ 135.000 COP",
+                usd: "$ 34.60 USD"
+            },
+            sensores: {
+                tag: "Detección Óptica",
+                title: "Sensor Infrarrojo / UV de Llama",
+                desc: "Detecta radiación de combustión en menos de 15 ms para activar el disparo y enviar alerta a la nube.",
+                cop: "$ 28.000 COP",
+                usd: "$ 7.20 USD"
+            },
+            cuerpo: {
+                tag: "Estructura",
+                title: "Cilindro Resonador en ABS",
+                desc: "Cámara acústica sellada que canaliza toda la energía sonora hacia la salida frontal.",
+                cop: "$ 65.000 COP",
+                usd: "$ 16.60 USD"
+            }
+        };
+
+        function displayComponentInfo(key) {
+            const data = componentsData[key];
+            if(!data) return;
+            document.getElementById('comp-tag').innerText = data.tag;
+            document.getElementById('comp-title').innerText = data.title;
+            document.getElementById('comp-desc').innerText = data.desc;
+            document.getElementById('comp-price-cop').innerText = data.cop;
+            document.getElementById('comp-price-usd').innerText = data.usd;
+        }
+
+        window.selectComponentByName = function(key) {
+            displayComponentInfo(key);
+            if(window.highlight3DComponent) window.highlight3DComponent(key);
+        };
+
+        let simState = 'idle';
+        let waveRadius = 0;
+
+        function triggerFireSuppressionSimulation() {
+            if (simState === 'firing' || simState === 'fire_detected') return;
+            simState = 'fire_detected';
+            waveRadius = 0;
+            document.getElementById('simStatusText').innerText = "⚠️ Conato detectado por sensor IR...";
+            
+            setTimeout(() => {
+                simState = 'firing';
+                document.getElementById('simStatusText').innerText = "🔊 Emitiendo pulso acústico de 45 Hz...";
+            }, 1000);
+
+            setTimeout(() => {
+                simState = 'extinguished';
+                document.getElementById('simStatusText').innerText = "✅ Llama sofocada sin residuos ni daños eléctricos.";
+            }, 2800);
+
+            setTimeout(() => {
+                simState = 'idle';
+                document.getElementById('simStatusText').innerText = "Sistema en espera • Listo para supresión sin agua ni químicos.";
+            }, 5000);
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            calculateFireProbability();
+            renderCameras();
+
+            // Canvas 2D Simulador
+            const canvas2d = document.getElementById('cutawayCanvas');
+            if(canvas2d) {
+                const ctx = canvas2d.getContext('2d');
+                function drawCutaway() {
+                    ctx.clearRect(0, 0, canvas2d.width, canvas2d.height);
+                    ctx.fillStyle = '#080c0a';
+                    ctx.fillRect(0, 0, canvas2d.width, canvas2d.height);
+
+                    // Cilindro horizontal minimalista
+                    ctx.strokeStyle = '#7fffd4';
+                    ctx.lineWidth = 2;
+                    ctx.fillStyle = '#111a16';
+                    ctx.fillRect(120, 90, 220, 100);
+                    ctx.strokeRect(120, 90, 220, 100);
+
+                    // Boquilla
+                    ctx.beginPath();
+                    ctx.moveTo(340, 90);
+                    ctx.lineTo(410, 115);
+                    ctx.lineTo(410, 165);
+                    ctx.lineTo(340, 190);
+                    ctx.closePath();
+                    ctx.fillStyle = '#182420';
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Transductor
+                    ctx.fillStyle = '#ffad33';
+                    ctx.fillRect(135, 105, 30, 70);
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText('Transductor 45Hz', 180, 144);
+
+                    // Fuego / Estado
+                    const fireX = 620, fireY = 155;
+                    if (simState === 'fire_detected' || simState === 'firing') {
+                        ctx.fillStyle = '#ef4444';
+                        ctx.beginPath();
+                        ctx.arc(fireX, fireY, 24, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.fillStyle = '#ffad33';
+                        ctx.beginPath();
+                        ctx.arc(fireX, fireY + 4, 13, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.fillStyle = '#fca5a5';
+                        ctx.fillText('Conato Activo', fireX - 36, fireY + 45);
+                    } else if (simState === 'extinguished') {
+                        ctx.fillStyle = '#7fffd4';
+                        ctx.fillText('✓ Fuego Extinguido', fireX - 48, fireY + 5);
+                    } else {
+                        ctx.fillStyle = '#64748b';
+                        ctx.fillText('Zona Monitoreada', fireX - 45, fireY + 5);
+                    }
+
+                    // Ondas sonoras
+                    if (simState === 'firing') {
+                        waveRadius += 5;
+                        if (waveRadius > 220) waveRadius = 10;
+                        ctx.strokeStyle = `rgba(127, 255, 212, ${1 - waveRadius / 220})`;
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.arc(410, 140, waveRadius, -0.5, 0.5);
+                        ctx.stroke();
+                    }
+                    requestAnimationFrame(drawCutaway);
+                }
+                drawCutaway();
+            }
+
+            // Canvas 3D Interactivo
+            const container3d = document.getElementById('interactive-3d-canvas');
+            if(container3d) {
+                const scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x0a0f0d);
+
+                const camera = new THREE.PerspectiveCamera(45, container3d.clientWidth / container3d.clientHeight, 0.1, 1000);
+                camera.position.set(0, 0, 5.5);
+
+                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(container3d.clientWidth, container3d.clientHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                container3d.appendChild(renderer.domElement);
+
+                scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+                const dirLight = new THREE.DirectionalLight(0x7fffd4, 1.8);
+                dirLight.position.set(3, 4, 5);
+                scene.add(dirLight);
+
+                const modelGroup = new THREE.Group();
+
+                const bodyMesh = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.85, 0.85, 2.2, 32),
+                    new THREE.MeshStandardMaterial({ color: 0x182420, metalness: 0.8, roughness: 0.3 })
+                );
+                bodyMesh.userData = { name: "cuerpo" };
+                modelGroup.add(bodyMesh);
+
+                const coneMesh = new THREE.Mesh(
+                    new THREE.ConeGeometry(0.9, 0.8, 32),
+                    new THREE.MeshStandardMaterial({ color: 0xffad33, metalness: 0.6, roughness: 0.3 })
+                );
+                coneMesh.position.y = 1.5;
+                coneMesh.userData = { name: "colimador" };
+                modelGroup.add(coneMesh);
+
+                const transMesh = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.92, 0.92, 0.3, 32),
+                    new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.9, roughness: 0.2 })
+                );
+                transMesh.position.y = -1.25;
+                transMesh.userData = { name: "transductor" };
+                modelGroup.add(transMesh);
+
+                const snsMesh = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.35, 0.55, 0.35),
+                    new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0c4a6e })
+                );
+                snsMesh.position.set(0.95, 0, 0);
+                snsMesh.userData = { name: "sensores" };
+                modelGroup.add(snsMesh);
+
+                scene.add(modelGroup);
+
+                const raycaster = new THREE.Raycaster();
+                const mouse = new THREE.Vector2();
+                let isDragging = false;
+                let prevMouse = { x: 0, y: 0 };
+
+                container3d.addEventListener('mousedown', (e) => {
+                    isDragging = false;
+                    prevMouse = { x: e.clientX, y: e.clientY };
+                });
+
+                container3d.addEventListener('mousemove', (e) => {
+                    if (e.buttons === 1) {
+                        isDragging = true;
+                        modelGroup.rotation.y += (e.clientX - prevMouse.x) * 0.01;
+                        modelGroup.rotation.x += (e.clientY - prevMouse.y) * 0.01;
+                        prevMouse = { x: e.clientX, y: e.clientY };
+                    }
+                });
+
+                container3d.addEventListener('click', (e) => {
+                    if (isDragging) return;
+                    const rect = renderer.domElement.getBoundingClientRect();
+                    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                    raycaster.setFromCamera(mouse, camera);
+                    const intersects = raycaster.intersectObjects(modelGroup.children);
+                    if (intersects.length > 0 && intersects[0].object.userData.name) {
+                        displayComponentInfo(intersects[0].object.userData.name);
+                    }
+                });
+
+                window.highlight3DComponent = function(name) {
+                    modelGroup.children.forEach(child => {
+                        child.scale.set(child.userData.name === name ? 1.15 : 1, child.userData.name === name ? 1.15 : 1, child.userData.name === name ? 1.15 : 1);
+                    });
+                    setTimeout(() => { modelGroup.children.forEach(c => c.scale.set(1, 1, 1)); }, 600);
+                };
+
+                function animate() {
+                    requestAnimationFrame(animate);
+                    if (!isDragging) modelGroup.rotation.y += 0.005;
+                    renderer.render(scene, camera);
+                }
+                animate();
+
+                window.trigger3DResize = () => {
+                    if (container3d.clientWidth > 0) {
+                        camera.aspect = container3d.clientWidth / container3d.clientHeight;
+                        camera.updateProjectionMatrix();
+                        renderer.setSize(container3d.clientWidth, container3d.clientHeight);
+                    }
+                };
+                window.addEventListener('resize', window.trigger3DResize);
+            }
+        });
+    </script>
+</body>
+</html>
